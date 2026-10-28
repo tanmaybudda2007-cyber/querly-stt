@@ -7,6 +7,8 @@ You choose the engine:
 - **Sarvam AI**: calls the [Sarvam speech-to-text API](https://docs.sarvam.ai). Needs an API key.
 
 `backend/evaluate.py` tests either engine on your own dataset and reports WER and CER.
+Two variants test Hinglish data in English letters (`evaluate_romanized.py`) or in
+English (`evaluate_translated.py`).
 
 ## How it fits together
 
@@ -28,6 +30,8 @@ All speech-to-text code lives in `backend/transcribers.py`.
     ├── app.py             FastAPI endpoints
     ├── transcribers.py    WhisperTranscriber, SarvamTranscriber
     ├── evaluate.py        test against a dataset
+    ├── evaluate_romanized.py   ...comparing romanized (Latin-script) text
+    ├── evaluate_translated.py  ...comparing English translations
     ├── requirements.txt
     └── .env.example
 ```
@@ -143,3 +147,48 @@ English is lower-cased. Two differences still count as errors:
 - English words in Latin vs Devanagari script in mixed speech (`apply` vs `अप्लाई`)
 
 Check `results.csv` before concluding that one engine is worse.
+
+## Hinglish: romanized and English evaluation
+
+Hinglish references mix scripts: the same English word is `slide` in one sentence and
+`स्लाइड` in another. `evaluate.py` counts that as an error even when the model heard it right.
+Two variants of the evaluation compare in English letters instead. Both take the same options
+as `evaluate.py`.
+
+**`evaluate_romanized.py`**: romanizes the reference *and* the model output (Hindi written in
+English letters), then scores them.
+
+```bash
+python evaluate_romanized.py --csv transcripts.csv --audio clips.tar.gz --engine whisper --language hi
+python evaluate_romanized.py --csv transcripts.csv --audio clips.tar.gz --engine whisper --language hi --romanizer sarvam
+```
+
+- `--romanizer uroman` (default) is free and local; `sarvam` uses Sarvam's transliteration
+  API and gives more natural spelling.
+- Romanized Hindi has no standard spelling, so repeated letters are collapsed on both sides
+  (`jaa` = `ja`).
+- English words written in Devanagari come out close but not identical (`स्लाइड` → `slaid`).
+  CER handles that better than WER.
+
+**`evaluate_translated.py`**: translates the reference into English, has the model translate
+the speech into English (Whisper `task="translate"`, Sarvam `mode="translate"`), and compares
+the two.
+
+```bash
+python evaluate_translated.py --csv transcripts.csv --audio clips.tar.gz --engine whisper --language hi
+python evaluate_translated.py --csv transcripts.csv --audio clips.tar.gz --engine sarvam --language hi
+```
+
+- References are translated once with Sarvam's text translation API (needs `SARVAM_API_KEY`)
+  and saved as `transcripts_english.csv` next to your CSV. Check it and fix bad lines; later
+  runs use your corrections. If you already have English references, put them in that file
+  (`path,english text`) and no API calls are made.
+- Also reports **BLEU** and **chrF** (0–100, higher is better), the standard translation
+  metrics. A sentence can be translated correctly in many ways, so compare engines with these
+  rather than WER.
+
+**About `--language`:** it's the language *spoken* in the clips, so use `hi` for Hindi audio
+in both scripts. The English output comes from romanizing or from translate mode.
+`--language en` tells Whisper the audio is English. On Hindi speech it then produces a
+translation-like English output without using its translation mode, which matches neither
+reference well.

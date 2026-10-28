@@ -8,3 +8,5 @@ soundfile
 requests
 python-dotenv
 jiwer
+uroman
+sacrebleu

@@ -6,9 +6,13 @@ Two interchangeable speech-to-text engines:
 
 Both have the same method:
 
-    transcribe(wav_path, language=None) -> {"text", "language", "duration", "segments"}
+    transcribe(wav_path, language=None, task="transcribe")
+        -> {"text", "language", "duration", "segments"}
 
-language=None means "detect it automatically". Otherwise pass a code from LANGUAGES.
+language is the language SPOKEN in the audio: None means "detect it automatically",
+otherwise pass a code from LANGUAGES.
+task="transcribe" writes down what was said; task="translate" outputs English instead,
+using each engine's built-in speech translation.
 """
 
 import io
@@ -114,7 +118,7 @@ class WhisperTranscriber:
         self.model_name = model_size
         self.model = WhisperModel(model_size, device=device, compute_type=compute_type)
 
-    def transcribe(self, path, language=None):
+    def transcribe(self, path, language=None, task="transcribe"):
         audio = load_audio(path)
         if language is None:
             language = self.detect_language(audio)
@@ -122,6 +126,7 @@ class WhisperTranscriber:
         segments, _ = self.model.transcribe(
             audio,
             language=language,
+            task=task,  # "translate" makes Whisper output English
             beam_size=5,
             vad_filter=True,  # skip silence, where Whisper tends to invent text
             condition_on_previous_text=False,  # avoids repetition loops, common in Indic output
@@ -161,7 +166,9 @@ class SarvamTranscriber:
             raise RuntimeError("SARVAM_API_KEY is not set (add it to backend/.env)")
         self.model_name = model or os.getenv("SARVAM_MODEL", "saaras:v3")
 
-    def transcribe(self, path, language=None):
+    def transcribe(self, path, language=None, task="transcribe"):
+        if task == "translate" and not self.model_name.startswith("saaras"):
+            raise RuntimeError("Speech translation needs SARVAM_MODEL=saaras:v3")
         audio = load_audio(path)
         chunk_len = self.chunk_seconds * SAMPLE_RATE
         segments, detected = [], []
@@ -169,7 +176,7 @@ class SarvamTranscriber:
         # Longer recordings are sent in consecutive 25 s pieces.
         for start in range(0, len(audio), chunk_len):
             piece = audio[start : start + chunk_len]
-            result = self._request(piece, language)
+            result = self._request(piece, language, task)
             if result.get("transcript"):
                 segments.append({
                     "start": round(start / SAMPLE_RATE, 2),
@@ -191,13 +198,13 @@ class SarvamTranscriber:
             "segments": segments,
         }
 
-    def _request(self, samples, language):
+    def _request(self, samples, language, task):
         wav = io.BytesIO()
         sf.write(wav, samples, SAMPLE_RATE, format="WAV", subtype="PCM_16")
 
         data = {"model": self.model_name}
         if self.model_name.startswith("saaras"):
-            data["mode"] = "transcribe"
+            data["mode"] = task  # "transcribe" or "translate" (output in English)
         if language:  # omit to let Sarvam detect the language
             data["language_code"] = SARVAM_CODES[language]
 

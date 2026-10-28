@@ -160,39 +160,70 @@ def score(references, hypotheses):
     return jiwer.wer(list(refs), list(hyps)), jiwer.cer(list(refs), list(hyps))
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Evaluate transcription on a dataset")
+def add_dataset_args(parser):
+    """Command-line options shared by evaluate.py and the scripts built on it."""
     parser.add_argument("--csv", required=True, help="CSV of: path/to/clip.wav, transcript")
     parser.add_argument("--audio", required=True, help="clips .tar.gz, or an extracted folder")
     parser.add_argument("--engine", default="whisper", choices=["whisper", "sarvam"])
     parser.add_argument("--language", default=None,
-                        help="language code for every file (e.g. hi); default: auto-detect")
+                        help="language spoken in the clips (e.g. hi); default: auto-detect")
     parser.add_argument("--limit", type=int, help="only use the first N clips (for a quick test)")
     parser.add_argument("--out", default="results.csv", help="per-file results CSV")
-    args = parser.parse_args()
 
-    items = load_dataset(args.csv, args.audio, args.language)
-    if args.limit:
-        items = items[: args.limit]
-    print(f"Loaded {len(items)} files. Engine: {args.engine}\n")
-    transcriber = get_transcriber(args.engine)
 
+def convert_references(items, convert, cache_path):
+    """Replace each item's reference text with convert(text), e.g. a translation.
+
+    Results are saved to cache_path (same "path,text" format as your transcripts CSV)
+    and reused on later runs, so each reference is converted only once. You can open
+    that file to check the converted references, and correct them by hand if needed.
+    """
+    cache = {}
+    if Path(cache_path).exists():
+        cache = dict(read_transcripts(cache_path))
+
+    todo = [item for item in items if item["path"] not in cache]
+    if todo:
+        print(f"Converting {len(todo)} reference transcripts -> {cache_path}")
+    try:
+        for i, item in enumerate(todo, 1):
+            cache[item["path"]] = convert(item["text"])
+            if i % 20 == 0:
+                print(f"  {i}/{len(todo)}")
+    finally:  # save progress even if a conversion fails, so a rerun continues from here
+        if todo:
+            with open(cache_path, "w", encoding="utf-8", newline="") as f:
+                csv.writer(f).writerows(cache.items())
+
+    for item in items:
+        item["original"] = item["text"]
+        item["text"] = cache[item["path"]]
+
+
+def run_evaluation(items, transcriber, task="transcribe", convert_hypothesis=None):
+    """Transcribe every clip and score it against its reference. Returns one row per clip.
+
+    convert_hypothesis, if given, is applied to the model output before scoring
+    (e.g. to romanize it the same way as the references).
+    """
     rows = []
     for i, item in enumerate(items, 1):
         start = time.time()
         try:
-            result = transcriber.transcribe(str(item["audio"]), item["language"])
+            result = transcriber.transcribe(str(item["audio"]), item["language"], task)
             hypothesis, error = result["text"], ""
             duration, detected = result["duration"], result["language"]
         except Exception as e:  # keep going; a failed file scores as an empty transcript
             hypothesis, error, duration, detected = "", str(e), 0, ""
         seconds = time.time() - start
 
-        ref, hyp = normalize(item["text"]), normalize(hypothesis)
+        compared = convert_hypothesis(hypothesis) if convert_hypothesis and hypothesis else hypothesis
+        ref, hyp = normalize(item["text"]), normalize(compared)
         file_wer, file_cer = score([ref], [hyp])
-        rows.append({
-            "file": item["path"],
-            "language": item["language"] or detected,
+        row = {"file": item["path"], "language": item["language"] or detected}
+        if "original" in item:
+            row["original_reference"] = item["original"]
+        row.update({
             "reference": item["text"],
             "hypothesis": hypothesis,
             "ref_norm": ref,
@@ -203,15 +234,19 @@ def main():
             "seconds": round(seconds, 2),
             "error": error,
         })
+        rows.append(row)
         status = f"ERROR {error}" if error else f"WER {file_wer:.2%}" if file_wer is not None else ""
         print(f"[{i}/{len(items)}] {item['path']}  {status}")
+    return rows
 
-    with open(args.out, "w", encoding="utf-8", newline="") as f:
+
+def save_and_summarize(rows, out_path):
+    """Write per-file rows to CSV and print WER / CER / RTF, per language if several."""
+    with open(out_path, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=rows[0].keys())
         writer.writeheader()
         writer.writerows(rows)
 
-    # Summary: overall, then per language if there is more than one.
     groups = {"ALL": rows}
     languages = sorted({r["language"] or "unknown" for r in rows})
     if len(languages) > 1:
@@ -230,7 +265,18 @@ def main():
     failures = sum(1 for r in rows if r["error"])
     if failures:
         print(f"\n{failures} file(s) failed - see the 'error' column.")
-    print(f"\nPer-file results saved to {args.out}")
+    print(f"\nPer-file results saved to {out_path}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Evaluate transcription on a dataset")
+    add_dataset_args(parser)
+    args = parser.parse_args()
+
+    items = load_dataset(args.csv, args.audio, args.language)[: args.limit]
+    print(f"Loaded {len(items)} files. Engine: {args.engine}\n")
+    rows = run_evaluation(items, get_transcriber(args.engine))
+    save_and_summarize(rows, args.out)
 
 
 if __name__ == "__main__":
