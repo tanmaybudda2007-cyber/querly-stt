@@ -63,6 +63,37 @@ def load_audio(path):
     return audio
 
 
+def load_cuda_library():
+    """Make NVIDIA's cuBLAS 12 library available to faster-whisper on a GPU.
+
+    faster-whisper's GPU engine (CTranslate2) looks up "libcublas.so.12" by name the
+    first time it transcribes. Many machines, Google Colab included, don't have that
+    version on the library search path, so transcription fails with
+    "Library libcublas.so.12 is not found". If the pip package nvidia-cublas-cu12 is
+    installed, we load its copy now; CTranslate2 then finds the already-loaded library.
+    """
+    import ctypes
+    import sys
+
+    if not sys.platform.startswith("linux"):
+        return
+    try:
+        ctypes.CDLL("libcublas.so.12")  # already installed system-wide
+        return
+    except OSError:
+        pass
+    try:
+        import nvidia.cublas.lib
+    except ImportError:
+        raise RuntimeError(
+            "A GPU was found but the CUDA 12 library libcublas.so.12 is missing. "
+            "Install it with:  pip install nvidia-cublas-cu12   "
+            "(or set WHISPER_DEVICE=cpu to run on the CPU)"
+        ) from None
+    folder = list(nvidia.cublas.lib.__path__)[0]
+    ctypes.CDLL(os.path.join(folder, "libcublas.so.12"), mode=ctypes.RTLD_GLOBAL)
+
+
 class WhisperTranscriber:
     name = "whisper"
 
@@ -75,6 +106,8 @@ class WhisperTranscriber:
             import ctranslate2
 
             device = "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
+        if device == "cuda":
+            load_cuda_library()
         # float16 is standard on GPU; int8 is much faster on CPU with little accuracy loss.
         compute_type = "float16" if device == "cuda" else "int8"
 

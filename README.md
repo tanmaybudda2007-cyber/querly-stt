@@ -67,6 +67,12 @@ Open http://localhost:3000, pick a file, an engine and a language (or Auto-detec
 The first Whisper request downloads the model (about 3 GB for `large-v3`). On a laptop
 without a GPU, set `WHISPER_MODEL=small` or `medium` in `backend/.env`.
 
+**Using an NVIDIA GPU (including Google Colab):** also run `pip install nvidia-cublas-cu12`.
+faster-whisper needs CUDA 12's cuBLAS library, which many systems don't provide, and
+loads it from this package automatically. Without it, the GPU fails with
+`Library libcublas.so.12 is not found`. A newer driver (e.g. one reporting CUDA 13) is fine;
+drivers run older CUDA libraries.
+
 ## Languages
 
 English, Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada, Malayalam, Punjabi, and Odia.
