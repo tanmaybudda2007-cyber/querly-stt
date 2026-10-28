@@ -1,10 +1,15 @@
 # Indic Transcribe
 
-Upload a `.wav` file in Hindi, English or another Indian language and get its transcript.
-You choose the engine:
+Upload a `.wav` file in Hindi, English or another Indian language, get its transcript,
+and run the transcript through an LLM with your own prompt (e.g. to summarize it).
+You choose the transcription engine:
 
 - **Whisper**: runs locally with [faster-whisper](https://github.com/SYSTRAN/faster-whisper). Free; a GPU helps.
 - **Sarvam AI**: calls the [Sarvam speech-to-text API](https://docs.sarvam.ai). Needs an API key.
+
+For the LLM step you choose between Sarvam, Groq and Gemini (free tiers) or a local open
+model with Ollama. `backend/process.py` runs the same transcribe → LLM pipeline from the
+command line.
 
 `backend/evaluate.py` tests either engine on your own dataset and reports WER and CER.
 Two variants test Hinglish data in English letters (`evaluate_romanized.py`) or in
@@ -14,11 +19,12 @@ English (`evaluate_translated.py`).
 
 ```
 browser (public/)  →  Node server (server.js, :3000)  →  Python API (backend/app.py, :8000)
-                                                              └─ transcribers.py → Whisper or Sarvam
+                                                              ├─ transcribers.py → Whisper or Sarvam
+                                                              └─ llm.py          → Sarvam, Groq, Gemini or Ollama
 ```
 
 The Node server serves the web page and forwards `/api/...` requests to the Python API.
-All speech-to-text code lives in `backend/transcribers.py`.
+All speech-to-text code lives in `backend/transcribers.py`, and the LLM step in `backend/llm.py`.
 
 ```
 ├── server.js              Node web server
@@ -29,6 +35,9 @@ All speech-to-text code lives in `backend/transcribers.py`.
 └── backend/
     ├── app.py             FastAPI endpoints
     ├── transcribers.py    WhisperTranscriber, SarvamTranscriber
+    ├── llm.py             sends a transcript + prompt to an LLM
+    ├── prompt.txt         the default LLM prompt (edit freely)
+    ├── process.py         command line: transcribe files, then run the LLM
     ├── evaluate.py        test against a dataset
     ├── evaluate_romanized.py   ...comparing romanized (Latin-script) text
     ├── evaluate_translated.py  ...comparing English translations
@@ -76,6 +85,49 @@ faster-whisper needs CUDA 12's cuBLAS library, which many systems don't provide,
 loads it from this package automatically. Without it, the GPU fails with
 `Library libcublas.so.12 is not found`. A newer driver (e.g. one reporting CUDA 13) is fine;
 drivers run older CUDA libraries.
+
+## LLM step
+
+After transcription, the transcript goes to an LLM with a prompt you control.
+
+**Providers** (all use the same OpenAI-compatible chat API, so switching is one setting):
+
+| Provider | Default model | Cost | Setup in `backend/.env` |
+|---|---|---|---|
+| `groq` | `llama-3.3-70b-versatile` | Free tier (rate-limited) | `GROQ_API_KEY` from [console.groq.com](https://console.groq.com) |
+| `gemini` | `gemini-3.8-flash` | Free tier (rate-limited) | `GEMINI_API_KEY` from [aistudio.google.com](https://aistudio.google.com) |
+| `sarvam` | `sarvam-105b` | Paid credits | `SARVAM_API_KEY` (the same key as for transcription) |
+| `ollama` | `gemma3` | Free, runs locally | Install [Ollama](https://ollama.com), then `ollama pull gemma3` |
+
+Model names change over time. If a default stops working, set `LLM_MODEL` (or the Model box
+on the page) to a current one from the provider's model list. With Ollama, any model you've
+pulled works.
+
+**The prompt** is `backend/prompt.txt`. `{transcript}` is replaced by the transcript and
+`{language}` by the spoken language (e.g. "Hindi"). If the prompt has no `{transcript}`, the
+transcript is appended at the end. The default asks for an English summary.
+
+**Settings** (`backend/.env`): `LLM_PROVIDER`, `LLM_MODEL` (empty = provider default),
+`LLM_TEMPERATURE` (default 0.3; lower is more consistent), `LLM_MAX_TOKENS` (default 2048,
+the maximum length of the answer).
+
+**On the web page**, the LLM card shows all of these. Edits there apply to that page; to
+change the defaults, edit `.env` and `prompt.txt` and restart the API. "Run automatically
+after transcription" sends each new transcript straight to the LLM. **Run LLM** reruns it on
+the same transcript, so you can try prompt changes without transcribing again.
+
+**From the command line** (also works in Colab):
+
+```bash
+cd backend
+python process.py recording.wav
+python process.py clips/ --engine whisper --language hi --provider groq
+python process.py clips/ --provider ollama --model gemma3 --prompt my_prompt.txt --temperature 0
+```
+
+Results are printed and appended to `outputs.jsonl`, one JSON object per file (`file`,
+`language`, `transcript`, `llm_output`, `provider`, `model`). If the LLM step fails, the
+transcript is still saved, with an `error` field.
 
 ## Languages
 

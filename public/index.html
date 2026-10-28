@@ -14,12 +14,17 @@
     .card { background: #fff; border: 1px solid #e3e0d8; border-radius: 12px; padding: 20px; margin-top: 20px; }
     .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-top: 16px; }
     label { display: flex; flex-direction: column; font-size: 14px; color: #666; gap: 4px; }
-    select, button, input { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid #ccc; }
+    select, button, input, textarea { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid #ccc; }
+    textarea { width: 100%; box-sizing: border-box; min-height: 160px; font-size: 14px; }
+    input[type="number"] { width: 90px; }
+    label.inline { flex-direction: row; align-items: center; gap: 6px; }
+    h2 { font-size: 18px; margin: 0 0 4px; }
+    #llm-output { white-space: pre-wrap; }
     button { background: #c2410c; color: #fff; border: none; cursor: pointer; padding: 9px 20px; }
     button:disabled { opacity: 0.5; cursor: default; }
     audio { width: 100%; margin-top: 12px; }
-    #status { margin-top: 12px; color: #666; }
-    #status.error { color: #b91c1c; }
+    .status { margin-top: 12px; color: #666; }
+    .status.error { color: #b91c1c; }
     #text { font-size: 18px; white-space: pre-wrap; }
     .meta { font-size: 14px; color: #666; }
     .seg { font-size: 15px; padding: 2px 0; }
@@ -46,13 +51,39 @@
       </label>
       <button id="go" disabled>Transcribe</button>
     </div>
-    <div id="status"></div>
+    <div id="status" class="status"></div>
   </div>
 
   <div class="card" id="result" hidden>
     <div class="meta" id="info"></div>
     <p id="text"></p>
     <div id="segments"></div>
+  </div>
+
+  <div class="card">
+    <h2>LLM</h2>
+    <div class="meta">Runs your prompt on the transcript. <code>{transcript}</code> and <code>{language}</code>
+      in the prompt are filled in. Edits here apply to this page only; the default prompt is
+      <code>backend/prompt.txt</code>.</div>
+    <div class="row">
+      <label>Provider <select id="llm-provider"></select></label>
+      <label>Model <input id="llm-model" /></label>
+      <label>Temperature <input id="llm-temperature" type="number" min="0" max="2" step="0.1" /></label>
+      <label>Max tokens <input id="llm-max-tokens" type="number" min="1" step="1" /></label>
+    </div>
+    <div class="row">
+      <label style="flex: 1">Prompt <textarea id="llm-prompt"></textarea></label>
+    </div>
+    <div class="row">
+      <label class="inline"><input type="checkbox" id="llm-auto" checked /> Run automatically after transcription</label>
+      <button id="llm-go" disabled>Run LLM</button>
+    </div>
+    <div id="llm-status" class="status"></div>
+  </div>
+
+  <div class="card" id="llm-result" hidden>
+    <div class="meta" id="llm-info"></div>
+    <p id="llm-output"></p>
   </div>
 
   <script src="app.js"></script>

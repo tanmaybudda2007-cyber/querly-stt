@@ -1,0 +1,9 @@
+Below is an automatic transcript of a recording in {language}. It may mix Hindi and English, and it may contain recognition mistakes; use the context to read past them.
+
+Summarize the recording in English:
+1. A one-sentence overview.
+2. The main points as a short bullet list.
+3. Any action items, names, dates or numbers mentioned (write "None" if there are none).
+
+Transcript:
+{transcript}
