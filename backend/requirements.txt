@@ -10,3 +10,10 @@ python-dotenv
 jiwer
 uroman
 sacrebleu
+deep-translator
+
+# For evaluate_translated.py --translator nllb
+transformers
+sentencepiece
+# ...which also needs torch. It isn't listed here because Colab already has a GPU-matched
+# version, and on your own machine the right build depends on your GPU: see pytorch.org.

@@ -176,13 +176,22 @@ the two.
 
 ```bash
 python evaluate_translated.py --csv transcripts.csv --audio clips.tar.gz --engine whisper --language hi
-python evaluate_translated.py --csv transcripts.csv --audio clips.tar.gz --engine sarvam --language hi
+python evaluate_translated.py --csv transcripts.csv --audio clips.tar.gz --engine sarvam --language hi --translator nllb
 ```
 
-- References are translated once with Sarvam's text translation API (needs `SARVAM_API_KEY`)
-  and saved as `transcripts_english.csv` next to your CSV. Check it and fix bad lines; later
-  runs use your corrections. If you already have English references, put them in that file
-  (`path,english text`) and no API calls are made.
+- References are translated with `--translator`:
+  - `google` (default): Google Translate. Free, no key, needs internet. Its free endpoint
+    rate-limits, so requests are spaced 1 s apart and retried with growing waits. If it
+    still gives up, rerun the same command; finished translations are kept.
+  - `nllb`: Meta's NLLB-200 model, run locally and offline after a one-time ~2.5 GB download.
+    Fast on a GPU such as Colab's, slow on a CPU. `transformers` and `sentencepiece` come from
+    `requirements.txt`; it also needs **torch**, which Colab already has. On your own machine,
+    install torch from [pytorch.org](https://pytorch.org); the right build depends on your GPU.
+  - `sarvam`: Sarvam's translation API. Needs `SARVAM_API_KEY`.
+- Each reference is translated once and saved next to your CSV, e.g.
+  `transcripts_english_google.csv`. Check it and fix bad lines; later runs use your
+  corrections. If you already have English references, save them under that name
+  (`path,english text`) and nothing is translated.
 - Also reports **BLEU** and **chrF** (0–100, higher is better), the standard translation
   metrics. A sentence can be translated correctly in many ways, so compare engines with these
   rather than WER.
