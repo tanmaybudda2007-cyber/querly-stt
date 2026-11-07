@@ -1,7 +1,8 @@
 node_modules/
 __pycache__/
-samples/*
 .venv/
 .env
 results.csv
 outputs.jsonl
+sessions/
+samples/

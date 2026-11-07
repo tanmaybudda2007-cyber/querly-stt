@@ -1,0 +1,11 @@
+You are listening to a live conversation, from an automatic transcript in {language}. It may mix Hindi and English and contain recognition mistakes. {status} Time so far: {elapsed}.
+
+Summary of the earlier part of the conversation:
+{summary}
+
+Recent transcript:
+{recent}
+{new}
+
+Answer this question in English, based on the conversation (say so if the conversation doesn't cover it):
+{question}

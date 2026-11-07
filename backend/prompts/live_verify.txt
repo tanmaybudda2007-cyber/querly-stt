@@ -1,0 +1,19 @@
+You are checking facts in a live conversation, from an automatic transcript in {language}. It may mix Hindi and English and contain recognition mistakes; use the context to read past them. {status} Time so far: {elapsed}.
+
+Summary of the earlier part of the conversation:
+{summary}
+
+Recent transcript:
+{recent}
+
+New since your previous check:
+{new}
+
+Your previous check:
+{previous_output}
+
+List the factual claims made in the NEW part (numbers, dates, names, technical statements). For each, say in English:
+- the claim, with its time stamp
+- "consistent", "doubtful" or "contradicts something said earlier", with a one-line reason
+
+You have no internet access and your own knowledge can be wrong or out of date, so mark anything you are unsure about as "worth checking" rather than "false". Write "No new factual claims." if there are none.

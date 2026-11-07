@@ -90,6 +90,14 @@ def fill_prompt(template, transcript, language=None):
 def run_llm(transcript, prompt=None, provider=None, model=None, temperature=None,
             max_tokens=None, language=None):
     """Return {"output", "provider", "model", "seconds"}. Unset arguments use the defaults."""
+    template = prompt or default_settings()["prompt"]
+    messages = [{"role": "user", "content": fill_prompt(template, transcript, language)}]
+    return chat(messages, provider, model, temperature, max_tokens)
+
+
+def chat(messages, provider=None, model=None, temperature=None, max_tokens=None):
+    """Send chat messages ([{"role": "system"|"user"|"assistant", "content": ...}]).
+    Return {"output", "provider", "model", "seconds"}. Unset arguments use the defaults."""
     defaults = default_settings()
     provider = provider or defaults["provider"]
     if provider not in PROVIDERS:
@@ -102,7 +110,7 @@ def run_llm(transcript, prompt=None, provider=None, model=None, temperature=None
     model = model or defaults["model"] or config["model"]
     body = {
         "model": model,
-        "messages": [{"role": "user", "content": fill_prompt(prompt or defaults["prompt"], transcript, language)}],
+        "messages": messages,
         "temperature": defaults["temperature"] if temperature is None else temperature,
         "max_tokens": max_tokens or defaults["max_tokens"],
         **config.get("extra", {}),

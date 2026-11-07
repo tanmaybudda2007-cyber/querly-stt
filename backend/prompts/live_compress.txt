@@ -1,0 +1,9 @@
+You are maintaining a running summary of a long conversation, from an automatic transcript in {language}. It may mix Hindi and English and contain recognition mistakes.
+
+Running summary so far (empty at the start):
+{summary}
+
+Next part of the transcript:
+{transcript}
+
+Rewrite the running summary in English so it also covers the next part. Keep every fact, name, number, date, decision and open question, with approximate time stamps. Drop filler and repetition. Output only the updated summary.

@@ -1,0 +1,18 @@
+You are taking notes on a live conversation, from an automatic transcript in {language}. It may mix Hindi and English and contain recognition mistakes; use the context to read past them. {status} Time so far: {elapsed}.
+
+Your previous notes (empty at the start):
+{previous_output}
+
+Summary of the earlier part of the conversation:
+{summary}
+
+Recent transcript:
+{recent}
+
+New since your previous notes:
+{new}
+
+Write updated notes in English. Keep what is still correct from your previous notes and add the new information:
+1. Overview (2-3 sentences).
+2. Main points, as bullets, in the order they came up.
+3. Decisions, action items, names, dates and numbers mentioned (write "None yet" if there are none).

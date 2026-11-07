@@ -11,6 +11,8 @@ For the LLM step you choose between Sarvam, Groq and Gemini (free tiers) or a lo
 model with Ollama. `backend/process.py` runs the same transcribe → LLM pipeline from the
 command line.
 
+`backend/live.py` does the same live, from the microphone, in ~15 s chunks.
+
 `backend/evaluate.py` tests either engine on your own dataset and reports WER and CER.
 Two variants test Hinglish data in English letters (`evaluate_romanized.py`) or in
 English (`evaluate_translated.py`).
@@ -38,6 +40,8 @@ All speech-to-text code lives in `backend/transcribers.py`, and the LLM step in 
     ├── llm.py             sends a transcript + prompt to an LLM
     ├── prompt.txt         the default LLM prompt (edit freely)
     ├── process.py         command line: transcribe files, then run the LLM
+    ├── live.py            live: transcribe the microphone in ~15 s chunks, LLM updates as it goes
+    ├── prompts/           prompt templates for live.py (one file per mode)
     ├── evaluate.py        test against a dataset
     ├── evaluate_romanized.py   ...comparing romanized (Latin-script) text
     ├── evaluate_translated.py  ...comparing English translations
@@ -128,6 +132,69 @@ python process.py clips/ --provider ollama --model gemma3 --prompt my_prompt.txt
 Results are printed and appended to `outputs.jsonl`, one JSON object per file (`file`,
 `language`, `transcript`, `llm_output`, `provider`, `model`). If the LLM step fails, the
 transcript is still saved, with an `error` field.
+
+## Live mode
+
+`backend/live.py` transcribes the microphone as you speak and periodically sends the
+conversation to an LLM to summarize it, brainstorm on it, or check its facts. It runs in the
+terminal, on your own machine (Colab can't use your microphone).
+
+```bash
+cd backend
+pip install -r requirements.txt          # adds sounddevice; on Linux also: sudo apt install libportaudio2
+python live.py --language hi              # summarize mode, LLM settings from .env
+python live.py --language hi --mode brainstorm --update-every 60
+python live.py --engine sarvam --provider gemini
+python live.py --input meeting.wav        # simulate live from a file (works in Colab too)
+python live.py --help                     # all options
+```
+
+While it runs, type and press Enter: `s` updates the LLM output now, `? your question` asks
+about the conversation so far, `q` (or Ctrl+C) stops. On stopping, the last chunk is
+transcribed and the LLM writes a final version.
+
+**How it works.** Four stages run in parallel, connected by queues, so a slow transcription
+or LLM call never makes the recording lose audio:
+
+```
+microphone ──► segmenter ──► transcriber ──► LLM worker
+               cuts ~15 s    one chunk at    updates every --update-every s of speech,
+               at a pause    a time          on request, and at the end
+```
+
+- **Chunks are cut at pauses, not every N seconds.** A cut in the middle of a word makes
+  it come out wrong on both sides. A chunk is cut at the first pause (`--pause`, 0.5 s)
+  after `--min-chunk` (12 s). If nobody pauses, it's cut at the quietest moment before
+  `--max-chunk` (25 s). `--cut fixed --chunk-seconds 15` cuts at fixed times instead, for
+  comparison. Silent chunks are skipped, because Whisper invents text on silence.
+- **Continuity:** Whisper gets the end of the previous transcript (`--context-chars`, 200) so
+  names and spelling stay consistent across chunks. The language is detected once on the
+  first chunk and then kept (`--redetect` detects it per chunk; `--language hi` skips detection).
+- **Keeping up:** each chunk must be transcribed faster than it was spoken. If not, a warning
+  appears. On a laptop CPU use `--whisper-model small` or `medium`, or `--engine sarvam`.
+  `large-v3` needs a GPU to keep up. The full recording is saved, so you can re-transcribe it
+  afterwards with `process.py` and `large-v3` for the best quality.
+- **The LLM's context stays small.** Sending the whole transcript on every update would
+  grow without limit and use up free API tiers quickly. Instead the LLM gets a running
+  summary of everything older than `--recent-minutes` (4), plus the recent transcript word for
+  word, split into what it has already seen and what's new. Older parts are folded into the
+  summary by extra calls using `prompts/live_compress.txt`.
+
+**Modes and prompts.** `--mode` picks `prompts/live_<mode>.txt`: `summarize` (default),
+`brainstorm` or `verify`. Add a file, e.g. `prompts/live_minutes.txt`, and `--mode minutes`
+works. `--prompt my_prompt.txt` uses any file instead. Placeholders filled in: `{summary}`,
+`{recent}`, `{new}`, `{transcript}` (recent + new), `{previous_output}`, `{question}`,
+`{language}`, `{status}`, `{elapsed}`. `verify` has no internet access: it checks claims against
+the model's own knowledge and against what was said earlier, and marks doubtful ones as
+"worth checking".
+
+LLM options are the same as `process.py`: `--provider`, `--model`, `--temperature`,
+`--max-tokens`, plus `--update-every` (seconds of speech between updates, 0 = only on request),
+`--no-final`, and `--no-llm` to only transcribe.
+
+**Saved in `sessions/<date_time>/`:** `audio.wav` (the recording), `transcript.jsonl` (one line
+per chunk, with start and end times), `transcript.txt`, `llm.jsonl` (every LLM call, with the
+exact prompt sent), `output.md` (the final LLM output) and `settings.json`.
 
 ## Languages
 

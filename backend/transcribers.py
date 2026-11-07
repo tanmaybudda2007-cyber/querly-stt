@@ -4,19 +4,24 @@ Two interchangeable speech-to-text engines:
     WhisperTranscriber  - runs faster-whisper locally
     SarvamTranscriber   - calls the Sarvam AI speech-to-text API
 
-Both have the same method:
+Both have the same methods:
 
     transcribe(wav_path, language=None, task="transcribe")
         -> {"text", "language", "duration", "segments"}
+    transcribe_audio(samples, language=None, task="transcribe", prompt=None)
+        the same for audio already in memory (16 kHz mono float32), used by live.py
 
 language is the language SPOKEN in the audio: None means "detect it automatically",
 otherwise pass a code from LANGUAGES.
 task="transcribe" writes down what was said; task="translate" outputs English instead,
 using each engine's built-in speech translation.
+prompt is optional text that came just before this audio (e.g. the previous chunk's
+transcript); Whisper uses it to keep names, spelling and script consistent. Sarvam ignores it.
 """
 
 import io
 import os
+import time
 from math import gcd
 
 import numpy as np
@@ -116,10 +121,16 @@ class WhisperTranscriber:
         compute_type = "float16" if device == "cuda" else "int8"
 
         self.model_name = model_size
+        print(f"Loading Whisper '{model_size}' on {device} ({compute_type}). The first time, this "
+              f"downloads the model (large-v3 is about 3 GB), with no progress bar...", flush=True)
+        start = time.time()
         self.model = WhisperModel(model_size, device=device, compute_type=compute_type)
+        print(f"Whisper loaded in {time.time() - start:.0f} s", flush=True)
 
     def transcribe(self, path, language=None, task="transcribe"):
-        audio = load_audio(path)
+        return self.transcribe_audio(load_audio(path), language, task)
+
+    def transcribe_audio(self, audio, language=None, task="transcribe", prompt=None):
         if language is None:
             language = self.detect_language(audio)
 
@@ -127,6 +138,7 @@ class WhisperTranscriber:
             audio,
             language=language,
             task=task,  # "translate" makes Whisper output English
+            initial_prompt=prompt or None,
             beam_size=5,
             vad_filter=True,  # skip silence, where Whisper tends to invent text
             condition_on_previous_text=False,  # avoids repetition loops, common in Indic output
@@ -167,9 +179,11 @@ class SarvamTranscriber:
         self.model_name = model or os.getenv("SARVAM_MODEL", "saaras:v3")
 
     def transcribe(self, path, language=None, task="transcribe"):
+        return self.transcribe_audio(load_audio(path), language, task)
+
+    def transcribe_audio(self, audio, language=None, task="transcribe", prompt=None):
         if task == "translate" and not self.model_name.startswith("saaras"):
             raise RuntimeError("Speech translation needs SARVAM_MODEL=saaras:v3")
-        audio = load_audio(path)
         chunk_len = self.chunk_seconds * SAMPLE_RATE
         segments, detected = [], []
 
