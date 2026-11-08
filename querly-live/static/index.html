@@ -1072,7 +1072,7 @@ async function boot() {
     setupAssistant(config.llm);
     if (!state.hasKey) {
       banner("No API key yet — put <code>SARVAM_API_KEY</code> in <code>.env</code> " +
-             "next to <code>app.py</code> and restart the server. " +
+             "next to <code>live_server.py</code> and restart the server. " +
              "See <code>README.md</code>.", true);
       els.record.disabled = true;
       setStatus("no key", "bad");

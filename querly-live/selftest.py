@@ -2,7 +2,7 @@
 """
 End-to-end self-test. Proves the page's path works without a Sarvam key.
 
-It starts the fake Sarvam socket (mock_sarvam.py) and the real app (app.py) in
+It starts the fake Sarvam socket (mock_sarvam.py) and the real app (live_server.py) in
 one process, connects the way the browser does, streams PCM, and checks what
 comes back - including that every byte of audio reached the saved .wav, that a
 dropped socket reconnects, and that a refused session produces a clear message.
@@ -246,7 +246,7 @@ async def scenario_refused(port):
 
 def unit_checks():
     print("\n5. unit checks", flush=True)
-    import app as app_module
+    import live_server as app_module
 
     saved = os.environ.get("SARVAM_WS_URL")
     os.environ["SARVAM_WS_URL"] = "wss://api.sarvam.ai/speech-to-text-realtime/ws"
@@ -305,7 +305,7 @@ def unit_checks():
 async def run(port, mock_port):
     import uvicorn
 
-    import app as app_module
+    import live_server as app_module
 
     os.environ["SARVAM_API_KEY"] = "test-key-not-real"
     os.environ["SARVAM_WS_URL"] = "ws://127.0.0.1:%d/speech-to-text-realtime/ws" % mock_port

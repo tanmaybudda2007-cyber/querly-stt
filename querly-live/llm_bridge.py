@@ -114,7 +114,7 @@ class LLMBridge:
         self.final_written = False
         self.last_output = None
 
-    # ------------------------------------------------------------ used by app.py
+    # ------------------------------------------------------------ used by live_server.py
 
     async def start(self):
         try:

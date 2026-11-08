@@ -17,7 +17,7 @@ Then run the app against it (PowerShell):
 
     $env:SARVAM_WS_URL="ws://127.0.0.1:8765/speech-to-text-realtime/ws"
     $env:SARVAM_API_KEY="dummy"
-    python app.py
+    python live_server.py
 """
 
 from __future__ import annotations

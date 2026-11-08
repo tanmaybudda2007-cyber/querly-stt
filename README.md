@@ -15,7 +15,7 @@ Speech-to-text for Hindi, English, Hinglish and other Indian languages, with an 
 
 ```
 LIVE
-browser (querly-live/static) ──WebSocket──► querly-live/app.py (:8080) ──WebSocket──► Sarvam realtime STT
+browser (querly-live/static) ──WebSocket──► querly-live/live_server.py (:8080) ──WebSocket──► Sarvam realtime STT
                                                   │ each finished line
                                                   ▼
                                           backend/app.py (:8000) ── live_llm.py ── llm.py ──► Groq / Gemini / Sarvam / Ollama
@@ -37,7 +37,7 @@ browser (public/) ──► server.js (:3000) ──► backend/app.py (:8000) �
 ```
 ├── README.md
 ├── querly-live/               LIVE MODE
-│   ├── app.py                 server: browser <-> Sarvam, and lines -> backend
+│   ├── live_server.py         server: browser <-> Sarvam, and lines -> backend
 │   ├── llm_bridge.py          sends lines to the backend, relays LLM results to the page
 │   ├── static/index.html      the live page (transcript + assistant panel)
 │   ├── mock_sarvam.py         a fake Sarvam socket, for testing with no key
@@ -108,7 +108,7 @@ uvicorn app:app --port 8000
 
 # terminal 2: live transcription
 cd querly-live
-python app.py
+python live_server.py
 ```
 
 The browser opens <http://127.0.0.1:8080>. Click the round mic button (or press **space**)
@@ -218,7 +218,7 @@ and the app in another (PowerShell shown; on macOS/Linux use `export NAME=value`
 ```powershell
 $env:SARVAM_WS_URL="ws://127.0.0.1:8765/speech-to-text-realtime/ws"
 $env:SARVAM_API_KEY="dummy"
-python app.py
+python live_server.py
 ```
 
 **The fake socket doesn't listen to your audio.** It replays a fixed list of Hinglish lines,
@@ -245,7 +245,7 @@ look with no audio at all, open <http://127.0.0.1:8080/?demo=1>.
 
 | What you see | What it means |
 |---|---|
-| Red banner "No API key yet" | `querly-live/.env` is missing, misnamed (`.env.txt`), or the server started before you saved it. Fix it, then restart `python app.py`. |
+| Red banner "No API key yet" | `querly-live/.env` is missing, misnamed (`.env.txt`), or the server started before you saved it. Fix it, then restart `python live_server.py`. |
 | "Sarvam rejected the API key (HTTP 403)" | The key is wrong, or has a stray space or quote in `.env`. Make a fresh key and paste it again. |
 | "Sarvam refused the session (rate limit, quota exhausted, or invalid API key)" | You're out of credits, or the key was revoked. Check the dashboard billing page. |
 | Nothing happens when you click | The browser blocked the mic. Click the padlock in the address bar → Microphone → Allow, then reload. On Windows also check Settings → Privacy & security → Microphone → "Let desktop apps access your microphone". |
@@ -253,14 +253,14 @@ look with no audio at all, open <http://127.0.0.1:8080/?demo=1>.
 | Assistant says "unavailable" | The backend isn't running, or not on port 8000. Start it (`uvicorn app:app --port 8000` in `backend/`), then reload the page. |
 | Assistant: "no LLM provider set up" | No LLM key in `backend/.env`. Add one (e.g. `GROQ_API_KEY`) and restart the backend. |
 | Assistant error cards with an LLM error | The provider refused (wrong key, rate limit, retired model name). Transcription continues; fix `backend/.env` for the next recording. |
-| "Address already in use" | Another program uses the port. Run `python app.py --port 8123` and open the URL it prints. |
+| "Address already in use" | Another program uses the port. Run `python live_server.py --port 8123` and open the URL it prints. |
 | Text appears but very late | Set Speed to *Fastest*. On a slow connection to Sarvam, partials back up. |
 | Nothing in the transcript but the recording saved | The key or quota failed mid-session; the audio in `sessions/` can be re-transcribed later. |
 | Microphone picks up your speakers | Use headphones, or disable "listen to this device" in your sound settings. Echo cancellation is on by default. |
 
 ### Options
 
-- `python app.py --port 8123`: a different port (default 8080).
+- `python live_server.py --port 8123`: a different port (default 8080).
 - `--no-browser`: don't open the browser automatically.
 - `--host 0.0.0.0`: let other devices on your network open the page. The audio then crosses
   the network unencrypted; keep it on localhost unless you need it.
