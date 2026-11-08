@@ -6,6 +6,15 @@ Transcription + LLM API.
     POST /api/llm          JSON: transcript, and optionally prompt, provider, model,
                            temperature, max_tokens, language
 
+Live mode (called by querly-live, which does the transcription; see live_llm.py):
+    GET  /api/live/options           modes (with their prompt templates), providers
+    POST /api/live/start             JSON: mode, prompt, provider, model, temperature,
+                                     max_tokens, update_every, recent_minutes -> session_id
+    POST /api/live/{id}/transcript   JSON: text, start, end, language -> update_due
+    POST /api/live/{id}/update       refresh the mode's output (null if nothing new)
+    POST /api/live/{id}/question     JSON: question
+    POST /api/live/{id}/final        final output; ends the session
+
 Run:  uvicorn app:app --port 8000
 """
 
@@ -16,10 +25,11 @@ import time
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
+import live_llm
 from llm import PROVIDERS, default_settings, is_available, run_llm
 from transcribers import LANGUAGES, SARVAM_CODES, WHISPER_LANGUAGES, get_transcriber
 
-app = FastAPI(title="Indic Transcribe")
+app = FastAPI(title="Querly STT")
 
 
 @app.get("/api/options")
@@ -101,3 +111,88 @@ def llm(request: LLMRequest):
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(500, f"LLM request failed: {e}")
+
+
+# ------------------------------------------------------------------ live mode
+
+
+class LiveStart(BaseModel):
+    mode: str = "summarize"
+    prompt: str | None = None  # custom template; None = prompts/live_<mode>.txt
+    provider: str | None = None  # None = LLM_PROVIDER from .env
+    model: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+    update_every: float = 120  # seconds of speech between automatic updates; 0 = off
+    recent_minutes: float = 4  # transcript kept word for word; older parts are summarized
+
+
+class LiveLine(BaseModel):
+    text: str
+    start: float  # seconds from the start of the recording
+    end: float
+    language: str | None = None
+
+
+class LiveQuestion(BaseModel):
+    question: str
+
+
+def live_session(session_id):
+    session = live_llm.get_session(session_id)
+    if session is None:
+        # querly-live reacts to this by starting a new session and resending the transcript.
+        raise HTTPException(404, "Unknown live session (the backend may have restarted)")
+    return session
+
+
+def run_live(action):
+    try:
+        return action()
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"LLM request failed: {e}")
+
+
+@app.get("/api/live/options")
+def live_options():
+    return live_llm.options()
+
+
+@app.post("/api/live/start")
+def live_start(request: LiveStart):
+    try:
+        return {"session_id": live_llm.start_session(**request.model_dump())}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/live/{session_id}/transcript")
+def live_transcript(session_id: str, line: LiveLine):
+    due = live_session(session_id).add(line.text, line.start, line.end, line.language)
+    return {"update_due": due}
+
+
+@app.post("/api/live/{session_id}/update")
+def live_update(session_id: str):
+    session = live_session(session_id)
+    print(f"Live {session_id}: updating ({session.mode})...", flush=True)
+    return run_live(lambda: session.update())
+
+
+@app.post("/api/live/{session_id}/question")
+def live_question(session_id: str, request: LiveQuestion):
+    session = live_session(session_id)
+    print(f"Live {session_id}: answering a question...", flush=True)
+    return run_live(lambda: session.ask(request.question))
+
+
+@app.post("/api/live/{session_id}/final")
+def live_final(session_id: str):
+    session = live_session(session_id)
+    print(f"Live {session_id}: writing the final output...", flush=True)
+    try:
+        return run_live(lambda: session.update(final=True))
+    finally:
+        live_llm.end_session(session_id)

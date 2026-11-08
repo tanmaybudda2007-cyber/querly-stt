@@ -165,6 +165,48 @@
     .row { flex-wrap: wrap; gap: 10px; }
     main { padding: 6vh 6vw 16vh; }
   }
+
+  /* ---- transcript + assistant side by side ---- */
+  #middle { flex: 1; display: flex; min-height: 0; }
+  #middle main { flex: 1; min-width: 0; }
+  #assistant {
+    width: 400px; flex: none; overflow-y: auto;
+    border-left: 1px solid var(--line); background: #0b0c10;
+    padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;
+    font-size: 13.5px;
+  }
+  .a-head { display: flex; align-items: center; gap: 10px; }
+  .a-head b { font-weight: 650; font-size: 14px; }
+  .a-state { color: var(--dim); font-size: 12.5px; }
+  .a-state.ok { color: var(--accent); }
+  .a-state.busy { color: var(--warn); }
+  .a-state.bad { color: var(--bad); }
+  #assistant label { color: var(--dim); font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+  #assistant label.a-check { flex-direction: row; align-items: center; gap: 8px; color: var(--mid); font-size: 13px; }
+  #assistant input[type=text], #assistant input[type=number], #assistant textarea, #assistant select {
+    font: inherit; font-size: 13px; color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; width: 100%;
+  }
+  #assistant textarea { min-height: 150px; resize: vertical; font-size: 12px; line-height: 1.45; }
+  #assistant input:disabled, #assistant textarea:disabled, #assistant select:disabled { opacity: .45; }
+  #assistant details { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+  #assistant summary { cursor: pointer; color: var(--mid); font-size: 12.5px; }
+  .a-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
+  .a-note { color: var(--dim); font-size: 11.5px; line-height: 1.45; }
+  .a-ask { display: flex; gap: 8px; }
+  .a-ask input { flex: 1; }
+  .a-out { display: flex; flex-direction: column; gap: 10px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--panel); }
+  .card .c-head { color: var(--dim); font-size: 11.5px; margin-bottom: 6px; }
+  .card .c-body { white-space: pre-wrap; line-height: 1.5; color: #dfe3ea; word-break: break-word; }
+  .card.final { border-color: #1f5135; }
+  .card.question .c-q { color: var(--mid); margin-bottom: 6px; }
+  .card.error { border-color: #40202a; color: #f6c2c2; }
+  .a-empty { color: var(--dim); line-height: 1.6; margin: 0; }
+  @media (max-width: 900px) {
+    #middle { flex-direction: column; }
+    #assistant { width: auto; max-height: 45vh; border-left: none; border-top: 1px solid var(--line); }
+  }
 </style>
 </head>
 <body>
@@ -178,6 +220,7 @@
 
 <div id="banner"><span id="bannerText"></span></div>
 
+<div id="middle">
 <main id="scroller">
   <div id="lyrics">
     <p class="hint" id="hint">
@@ -188,6 +231,39 @@
     </p>
   </div>
 </main>
+
+<aside id="assistant">
+  <div class="a-head"><b>Assistant</b><span class="a-state" id="llmState">checking the backend…</span></div>
+  <label class="a-check"><input type="checkbox" id="llmOn" checked> Send the transcript to the LLM</label>
+  <details id="llmSettings">
+    <summary>LLM settings</summary>
+    <div class="a-grid">
+      <label>Mode <select id="llmMode"></select></label>
+      <label>Provider <select id="llmProvider"></select></label>
+      <label>Model <input type="text" id="llmModel"></label>
+      <label>Temperature <input type="number" id="llmTemp" min="0" max="2" step="0.1" placeholder="default"></label>
+      <label>Max tokens <input type="number" id="llmMaxTokens" min="1" step="1" placeholder="default"></label>
+      <label>Update every (s of speech) <input type="number" id="llmEvery" min="0" step="10" value="120"></label>
+      <label>Recent window (min) <input type="number" id="llmRecent" min="0.5" step="0.5" value="4"></label>
+    </div>
+    <label>Prompt
+      <textarea id="llmPrompt" spellcheck="false"></textarea>
+    </label>
+    <p class="a-note">The prompt comes from <code>backend/prompts/live_&lt;mode&gt;.txt</code>. Edits here
+      apply to the next recording on this page. Update every 0 = only when you press
+      Update now. Settings are fixed while recording. Empty boxes use <code>backend/.env</code>.</p>
+  </details>
+  <div><button id="llmUpdate" disabled>Update now</button></div>
+  <form class="a-ask" id="askForm">
+    <input type="text" id="askInput" placeholder="Ask about the conversation…" disabled>
+    <button id="askButton" disabled>Ask</button>
+  </form>
+  <div class="a-out" id="llmOut">
+    <p class="a-empty" id="llmEmpty">While you talk, the LLM's notes appear here every
+      couple of minutes. When you stop, it writes a final version.</p>
+  </div>
+</aside>
+</div>
 
 <footer>
   <div class="row">
@@ -327,7 +403,25 @@ const els = {
   save: document.getElementById("save"),
   clear: document.getElementById("clear"),
   micIcon: document.getElementById("micIcon"),
+  assistant: document.getElementById("assistant"),
+  llmState: document.getElementById("llmState"),
+  llmOn: document.getElementById("llmOn"),
+  llmMode: document.getElementById("llmMode"),
+  llmProvider: document.getElementById("llmProvider"),
+  llmModel: document.getElementById("llmModel"),
+  llmTemp: document.getElementById("llmTemp"),
+  llmMaxTokens: document.getElementById("llmMaxTokens"),
+  llmEvery: document.getElementById("llmEvery"),
+  llmRecent: document.getElementById("llmRecent"),
+  llmPrompt: document.getElementById("llmPrompt"),
+  llmUpdate: document.getElementById("llmUpdate"),
+  askForm: document.getElementById("askForm"),
+  askInput: document.getElementById("askInput"),
+  askButton: document.getElementById("askButton"),
+  llmOut: document.getElementById("llmOut"),
 };
+const LLM_INPUTS = ["llmOn", "llmMode", "llmProvider", "llmModel", "llmTemp", "llmMaxTokens",
+                    "llmEvery", "llmRecent", "llmPrompt"];
 
 const MIC_SVG = '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>';
 const STOP_SVG = '<rect x="7" y="7" width="10" height="10" rx="1.6"/>';
@@ -349,6 +443,8 @@ const state = {
   demo: new URLSearchParams(location.search).has("demo"),
   hasKey: true,
   stopping: false,
+  llm: null,         // backend's LLM options (modes, providers), or {available: false, reason}
+  llmActive: false,  // the LLM is on for the current recording
 };
 
 /* ----------------------------------------------------------------- helpers */
@@ -512,6 +608,27 @@ function handle(message) {
       setStatus("disconnected", "bad");
       if (!state.stopping) stop(true);
       break;
+    case "llm_status":
+      if (message.ready) { state.llmActive = true; setLlmButtons(true); }
+      llmState(message.message, message.ready ? "ok" : "");
+      break;
+    case "llm_working":
+      llmState({ update: "updating…", question: "answering…", final: "writing the final version…" }
+               [message.kind] || "working…", "busy");
+      break;
+    case "llm":
+      addCard(message);
+      llmState(message.kind === "final" ? "final version written" : "ready", "ok");
+      break;
+    case "llm_error":
+      addCard({ kind: "error", output: message.message });
+      llmState(message.fatal ? "off" : "error (see below)", "bad");
+      if (message.fatal) { state.llmActive = false; setLlmButtons(false); }
+      break;
+    case "llm_finishing":
+      setLlmButtons(false);
+      llmState("writing the final version…", "busy");
+      break;
     case "closed":
       if (message.session) {
         els.meta.textContent = (state.finals.length ? state.finals.length + " lines · " : "") +
@@ -616,6 +733,8 @@ async function start() {
   els.micIcon.innerHTML = STOP_SVG;
   els.record.classList.add("on");
   els.language.disabled = els.mode.disabled = els.streamType.disabled = true;
+  LLM_INPUTS.forEach(id => { els[id].disabled = true; });
+  document.getElementById("llmSettings").open = false;  // make room for the output
 
   try {
     const ws = new WebSocket(wsUrl());
@@ -646,6 +765,7 @@ async function start() {
       language_code: els.language.value,
       mode: els.mode.value,
       stream_type: els.streamType.value,
+      llm: llmSettings(),
     }));
 
     await startMic();
@@ -686,12 +806,17 @@ async function stop(silent) {
     try { ws.send(JSON.stringify({ type: "stop" })); } catch (e) {}
     await new Promise((resolve) => {
       const done = () => resolve();
-      const timer = setTimeout(done, 4000);
+      let timer = setTimeout(done, 4000);
       const previous = ws.onmessage;
       ws.onmessage = (event) => {
         let message = null;
         try { message = JSON.parse(event.data); } catch (e) {}
         if (previous) previous(event);
+        if (message && message.type === "llm_finishing") {
+          // The final LLM output can take a while; wait for it.
+          clearTimeout(timer);
+          timer = setTimeout(done, 240000);
+        }
         if (message && message.type === "closed") {
           clearTimeout(timer);
           resolve();
@@ -710,6 +835,11 @@ async function stop(silent) {
 function resetButtons() {
   els.record.disabled = !state.hasKey;
   els.language.disabled = els.mode.disabled = els.streamType.disabled = false;
+  const llmOk = !!(state.llm && state.llm.available);
+  LLM_INPUTS.forEach(id => { els[id].disabled = !llmOk; });
+  state.llmActive = false;
+  setLlmButtons(false);
+  if (llmOk && !/final|off|error/.test(els.llmState.textContent)) llmState(llmIdleText(), "");
   els.micIcon.innerHTML = MIC_SVG;
   els.record.classList.remove("on", "speaking");
   els.level.style.width = "0%";
@@ -727,6 +857,7 @@ window.addEventListener("keydown", (event) => {
   if (event.code !== "Space") return;
   const tag = (event.target && event.target.tagName) || "";
   if (tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA") return;
+  if (els.assistant.contains(event.target)) return;  // the assistant's buttons and boxes
   event.preventDefault();
   if (state.demo) return;
   toggle();
@@ -768,6 +899,132 @@ els.clear.addEventListener("click", () => {
   hint.innerHTML = "Cleared. Press the button and start talking.";
   els.lyrics.appendChild(hint);
   els.hint = hint;
+  els.llmOut.innerHTML = "";
+});
+
+/* ---------------------------------------------------------------- assistant
+   The LLM work happens in the backend; this page only sends settings, the
+   "update now" and "ask" commands, and shows what comes back. */
+function llmState(text, kind) {
+  els.llmState.textContent = text;
+  els.llmState.className = "a-state" + (kind ? " " + kind : "");
+}
+
+function llmIdleText() {
+  return els.llmOn.checked ? "ready: starts with the recording" : "off";
+}
+
+function setLlmButtons(on) {
+  els.llmUpdate.disabled = els.askInput.disabled = els.askButton.disabled = !on;
+}
+
+function modeTemplate() {
+  return (state.llm && state.llm.modes && state.llm.modes[els.llmMode.value]) || "";
+}
+
+function llmSettings() {
+  if (!state.llm || !state.llm.available || !els.llmOn.checked) return { enabled: false };
+  const prompt = els.llmPrompt.value;
+  return {
+    enabled: true,
+    mode: els.llmMode.value,
+    // Only send the prompt if it was edited, so the backend otherwise uses the file.
+    prompt: prompt.trim() && prompt !== modeTemplate() ? prompt : null,
+    provider: els.llmProvider.value || null,
+    model: els.llmModel.value.trim() || null,
+    temperature: els.llmTemp.value === "" ? null : Number(els.llmTemp.value),
+    max_tokens: els.llmMaxTokens.value === "" ? null : Number(els.llmMaxTokens.value),
+    update_every: Number(els.llmEvery.value || 0),
+    recent_minutes: Number(els.llmRecent.value || 4),
+  };
+}
+
+function addCard(message) {
+  const empty = document.getElementById("llmEmpty");
+  if (empty) empty.remove();
+  const card = document.createElement("div");
+  card.className = "card " + (message.kind || "");
+  const head = document.createElement("div");
+  head.className = "c-head";
+  const label = { update: "Update", final: "Final version", question: "Answer", error: "Problem" }
+                [message.kind] || message.kind;
+  const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  head.textContent = [label, time, message.model, message.seconds != null ? message.seconds + " s" : ""]
+    .filter(Boolean).join(" · ");
+  card.appendChild(head);
+  if (message.question) {
+    const q = document.createElement("div");
+    q.className = "c-q";
+    q.textContent = "Q: " + message.question;
+    card.appendChild(q);
+  }
+  const body = document.createElement("div");
+  body.className = "c-body";
+  body.textContent = message.output || "(empty response)";
+  card.appendChild(body);
+  els.llmOut.prepend(card);  // newest first
+  els.assistant.scrollTop = 0;
+}
+
+function setupAssistant(llm) {
+  state.llm = llm;
+  if (!llm || !llm.available) {
+    llmState("unavailable", "bad");
+    addCard({ kind: "error", output: (llm && llm.reason ? llm.reason : "The backend didn't answer.") +
+      "\nTranscription works without it. Start the backend, then reload this page." });
+    els.llmOn.checked = false;
+    LLM_INPUTS.forEach(id => { els[id].disabled = true; });
+    return;
+  }
+  els.llmMode.innerHTML = "";
+  Object.keys(llm.modes).forEach(name => els.llmMode.add(new Option(name, name)));
+  els.llmMode.value = llm.defaults.mode in llm.modes ? llm.defaults.mode : Object.keys(llm.modes)[0];
+  els.llmPrompt.value = modeTemplate();
+
+  els.llmProvider.innerHTML = "";
+  const usable = [];
+  Object.entries(llm.providers).forEach(([name, info]) => {
+    const option = new Option(info.available ? name : name + " (not set up)", name);
+    option.disabled = !info.available;
+    option.title = info.note || "";
+    els.llmProvider.add(option);
+    if (info.available) usable.push(name);
+  });
+  els.llmProvider.value = usable.includes(llm.defaults.provider) ? llm.defaults.provider : (usable[0] || "");
+  els.llmModel.placeholder = (llm.providers[els.llmProvider.value] || {}).default_model || "";
+  els.llmEvery.value = llm.defaults.update_every;
+  els.llmRecent.value = llm.defaults.recent_minutes;
+  if (!usable.length) {
+    llmState("no LLM provider set up", "bad");
+    addCard({ kind: "error", output: "No LLM provider has an API key. Add one (e.g. GROQ_API_KEY) " +
+      "to backend/.env and restart the backend." });
+    els.llmOn.checked = false;
+    LLM_INPUTS.forEach(id => { els[id].disabled = true; });
+    state.llm = { available: false };
+    return;
+  }
+  llmState(llmIdleText(), "");
+}
+
+els.llmMode.addEventListener("change", () => { els.llmPrompt.value = modeTemplate(); });
+els.llmProvider.addEventListener("change", () => {
+  els.llmModel.value = "";
+  els.llmModel.placeholder = (state.llm.providers[els.llmProvider.value] || {}).default_model || "";
+});
+els.llmOn.addEventListener("change", () => llmState(llmIdleText(), ""));
+
+els.llmUpdate.addEventListener("click", () => {
+  if (state.ws && state.ws.readyState === WebSocket.OPEN && state.llmActive) {
+    state.ws.send(JSON.stringify({ type: "llm_update" }));
+  }
+});
+
+els.askForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const question = els.askInput.value.trim();
+  if (!question || !state.ws || state.ws.readyState !== WebSocket.OPEN || !state.llmActive) return;
+  state.ws.send(JSON.stringify({ type: "llm_question", question: question }));
+  els.askInput.value = "";
 });
 
 /* --------------------------------------------------------------------- demo */
@@ -812,10 +1069,11 @@ async function boot() {
     const response = await fetch("/api/config");
     const config = await response.json();
     state.hasKey = !!config.has_key;
+    setupAssistant(config.llm);
     if (!state.hasKey) {
       banner("No API key yet — put <code>SARVAM_API_KEY</code> in <code>.env</code> " +
              "next to <code>app.py</code> and restart the server. " +
-             "See <code>RUN_WINDOWS.md</code>.", true);
+             "See <code>README.md</code>.", true);
       els.record.disabled = true;
       setStatus("no key", "bad");
     } else {

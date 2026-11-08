@@ -12,8 +12,6 @@ uroman
 sacrebleu
 deep-translator
 
-# For live.py with a microphone (Linux also needs: sudo apt install libportaudio2)
-sounddevice
 
 # For evaluate_translated.py --translator nllb
 transformers

@@ -9,7 +9,7 @@ Both have the same methods:
     transcribe(wav_path, language=None, task="transcribe")
         -> {"text", "language", "duration", "segments"}
     transcribe_audio(samples, language=None, task="transcribe", prompt=None)
-        the same for audio already in memory (16 kHz mono float32), used by live.py
+        the same for audio already in memory (16 kHz mono float32)
 
 language is the language SPOKEN in the audio: None means "detect it automatically",
 otherwise pass a code from LANGUAGES.
