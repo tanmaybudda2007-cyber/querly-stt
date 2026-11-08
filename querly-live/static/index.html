@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Querly Live</title>
+<style>
+  :root {
+    --bg: #08090c;
+    --panel: #101218;
+    --line: #1d2029;
+    --text: #f4f5f7;
+    --dim: #5b6070;
+    --mid: #9aa0ae;
+    --accent: #4ade80;
+    --warn: #fbbf24;
+    --bad: #f87171;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Nirmala UI", system-ui, -apple-system, "Noto Sans",
+                 "Noto Sans Devanagari", sans-serif;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--line);
+    flex: none;
+  }
+  .brand { font-weight: 650; letter-spacing: .3px; font-size: 15px; }
+  .brand span { color: var(--dim); font-weight: 400; }
+  .grow { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12.5px; color: var(--mid);
+    background: var(--panel); border: 1px solid var(--line);
+    padding: 6px 12px; border-radius: 999px; white-space: nowrap;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+  .dot.live { background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: pulse 1.6s infinite; }
+  .dot.warn { background: var(--warn); }
+  .dot.bad  { background: var(--bad); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .timer { font-variant-numeric: tabular-nums; color: var(--mid); font-size: 13px; }
+
+  main {
+    flex: 1; overflow-y: auto; overflow-x: hidden;
+    padding: 4vh 8vw 6vh;
+    scroll-behavior: smooth;
+    /* Fade only the top: the newest line sits at the bottom and must stay crisp. */
+    mask-image: linear-gradient(to bottom, transparent 0, #000 6vh, #000 100%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 6vh, #000 100%);
+  }
+  /* Text grows upward from the bottom, like lyrics, so the eye always lands on
+     the newest line. The ::before spacer does this without the flex-end
+     overflow bug (which would make old lines unreachable). */
+  #lyrics {
+    max-width: 980px; margin: 0 auto;
+    min-height: 100%;
+    display: flex; flex-direction: column;
+  }
+  #lyrics::before { content: ""; margin-top: auto; }
+  .line {
+    font-size: clamp(24px, 3.1vw, 46px);
+    line-height: 1.34;
+    font-weight: 600;
+    margin: 0 0 .42em;
+    color: var(--dim);
+    transition: color .35s ease, opacity .35s ease;
+    word-break: break-word;
+  }
+  .line.last { color: #c2c8d4; }
+  .line.current { color: var(--text); }
+  .line.current .caret {
+    display: inline-block; width: 3px; height: 1em; margin-left: 3px;
+    background: var(--accent); vertical-align: -0.13em;
+    animation: blink 1.1s steps(2, start) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .hint {
+    color: var(--dim); font-size: 16px; line-height: 1.6; max-width: 560px;
+  }
+  .hint b { color: var(--mid); font-weight: 600; }
+
+  footer {
+    flex: none;
+    border-top: 1px solid var(--line);
+    background: linear-gradient(to top, #0b0d11, var(--bg));
+    padding: 16px 28px 22px;
+  }
+  .row { display: flex; align-items: center; gap: 18px; max-width: 1180px; margin: 0 auto; }
+  .row + .row { margin-top: 14px; }
+
+  button {
+    font: inherit; color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 9px 15px; cursor: pointer; font-size: 13.5px;
+    transition: border-color .15s, background .15s, transform .1s;
+  }
+  button:hover:not(:disabled) { border-color: #2b303d; background: #161922; }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  #record {
+    width: 68px; height: 68px; border-radius: 50%; padding: 0;
+    display: grid; place-items: center; flex: none;
+    background: #14171f; border: 1px solid #262b36;
+    transition: box-shadow .25s, border-color .25s, background .25s;
+  }
+  #record svg { width: 26px; height: 26px; }
+  #record.on {
+    background: #1a1020; border-color: #4a2440;
+    box-shadow: 0 0 0 0 rgba(248, 113, 113, .45);
+  }
+  #record.speaking { box-shadow: 0 0 26px -4px var(--accent); border-color: var(--accent); }
+
+  .meter { flex: 1; height: 4px; border-radius: 2px; background: #171a22; overflow: hidden; }
+  .meter i {
+    display: block; height: 100%; width: 0%;
+    background: linear-gradient(90deg, #2e8b57, var(--accent));
+    transition: width .07s linear;
+  }
+
+  label.field { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--dim); }
+  select {
+    font: inherit; font-size: 13px; color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 9px; padding: 7px 9px; cursor: pointer;
+  }
+  select:disabled { opacity: .45; }
+
+  #banner {
+    display: none; align-items: center; gap: 10px;
+    font-size: 13px; padding: 10px 16px; margin: 0 28px;
+    border: 1px solid #3a2c12; background: #17130a; color: #f3d9a4;
+    border-radius: 10px;
+  }
+  #banner.show { display: flex; }
+  #banner.bad { border-color: #40202a; background: #180d10; color: #f6c2c2; }
+  #banner code { font-family: ui-monospace, Consolas, monospace; color: inherit; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 132px; transform: translateX(-50%) translateY(12px);
+    background: #1b1013; border: 1px solid #4a2027; color: #ffd9d9;
+    padding: 11px 18px; border-radius: 10px; font-size: 13.5px; max-width: min(760px, 90vw);
+    opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+    z-index: 20;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .kbd {
+    font-family: ui-monospace, Consolas, monospace; font-size: 11.5px;
+    border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px;
+    padding: 1px 5px; color: var(--mid);
+  }
+  @media (max-width: 720px) {
+    .row { flex-wrap: wrap; gap: 10px; }
+    main { padding: 6vh 6vw 16vh; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Querly <span>Live</span></div>
+  <div class="pill" id="status"><i class="dot" id="dot"></i><span id="statusText">idle</span></div>
+  <div class="grow"></div>
+  <div class="timer" id="timer">00:00</div>
+</header>
+
+<div id="banner"><span id="bannerText"></span></div>
+
+<main id="scroller">
+  <div id="lyrics">
+    <p class="hint" id="hint">
+      Press the button below and start talking.<br>
+      Your words appear here as you speak — <b>Hinglish, Hindi or English</b>.
+      <br><br>
+      <span class="kbd">space</span> starts and stops.
+    </p>
+  </div>
+</main>
+
+<footer>
+  <div class="row">
+    <button id="record" title="Start / stop (space)" aria-label="Start recording">
+      <svg id="micIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>
+      </svg>
+    </button>
+    <div class="meter"><i id="level"></i></div>
+    <label class="field">Language
+      <select id="language">
+        <option value="hi-IN" selected>Hindi + Hinglish</option>
+        <option value="auto">Auto-detect</option>
+        <option value="en-IN">English</option>
+        <option value="bn-IN">Bengali</option>
+        <option value="ta-IN">Tamil</option>
+        <option value="te-IN">Telugu</option>
+        <option value="mr-IN">Marathi</option>
+        <option value="gu-IN">Gujarati</option>
+        <option value="kn-IN">Kannada</option>
+        <option value="ml-IN">Malayalam</option>
+        <option value="pa-IN">Punjabi</option>
+        <option value="or-IN">Odia</option>
+      </select>
+    </label>
+    <label class="field">Script
+      <select id="mode">
+        <option value="translit" selected>Hinglish — Latin</option>
+        <option value="transcribe">Devanagari</option>
+        <option value="codemix">Mixed script</option>
+        <option value="translate">English translation</option>
+      </select>
+    </label>
+    <label class="field">Speed
+      <select id="streamType">
+        <option value="fast">Fastest</option>
+        <option value="balanced">Balanced</option>
+      </select>
+    </label>
+  </div>
+  <div class="row">
+    <button id="copy">Copy</button>
+    <button id="save">Save .txt</button>
+    <button id="clear">Clear</button>
+    <div class="grow"></div>
+    <span class="timer" id="meta"></span>
+  </div>
+</footer>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ worklet
+   Runs on the audio thread. Collects samples, resamples to 16 kHz if the
+   browser gave us a different rate, and posts 50 ms blocks of linear16 PCM.
+   The box-filter decimation below is also covered by the node unit test. */
+const WORKLET = `
+class PCM16Worklet extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.ratio = sampleRate / 16000;
+    this.out = new Int16Array(800);
+    this.outLen = 0;
+    this.tail = new Float32Array(0);
+    this.pos = 0;
+  }
+  push(sample) {
+    let v = sample;
+    if (v > 1) v = 1; else if (v < -1) v = -1;
+    this.out[this.outLen++] = v * 32767;
+    if (this.outLen === this.out.length) {
+      const copy = this.out.buffer.slice(0);
+      this.port.postMessage(copy, [copy]);
+      this.outLen = 0;
+    }
+  }
+  process(inputs) {
+    const input = inputs[0];
+    if (!input || input.length === 0) return true;
+    const ch = input[0];
+    if (!ch || ch.length === 0) return true;
+
+    if (this.ratio === 1) {
+      for (let i = 0; i < ch.length; i++) this.push(ch[i]);
+      return true;
+    }
+
+    const buf = new Float32Array(this.tail.length + ch.length);
+    buf.set(this.tail, 0);
+    buf.set(ch, this.tail.length);
+
+    while (this.pos + this.ratio <= buf.length) {
+      const start = Math.floor(this.pos);
+      const end = Math.floor(this.pos + this.ratio);
+      let sum = 0, n = 0;
+      for (let i = start; i <= end && i < buf.length; i++) { sum += buf[i]; n++; }
+      this.push(sum / (n || 1));
+      this.pos += this.ratio;
+    }
+    const drop = Math.floor(this.pos);
+    if (drop > 0) {
+      this.tail = buf.slice(drop);
+      this.pos -= drop;
+    } else {
+      this.tail = buf;
+    }
+    return true;
+  }
+}
+registerProcessor("pcm16", PCM16Worklet);
+`;
+
+/* ------------------------------------------------------------------- state */
+const SAMPLE_RATE = 16000;
+const els = {
+  record: document.getElementById("record"),
+  status: document.getElementById("status"),
+  statusText: document.getElementById("statusText"),
+  dot: document.getElementById("dot"),
+  timer: document.getElementById("timer"),
+  meta: document.getElementById("meta"),
+  level: document.getElementById("level"),
+  lyrics: document.getElementById("lyrics"),
+  hint: document.getElementById("hint"),
+  scroller: document.getElementById("scroller"),
+  banner: document.getElementById("banner"),
+  bannerText: document.getElementById("bannerText"),
+  toast: document.getElementById("toast"),
+  language: document.getElementById("language"),
+  mode: document.getElementById("mode"),
+  streamType: document.getElementById("streamType"),
+  copy: document.getElementById("copy"),
+  save: document.getElementById("save"),
+  clear: document.getElementById("clear"),
+  micIcon: document.getElementById("micIcon"),
+};
+
+const MIC_SVG = '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>';
+const STOP_SVG = '<rect x="7" y="7" width="10" height="10" rx="1.6"/>';
+
+const state = {
+  running: false,
+  starting: false,
+  finals: [],        // [{key, text}] key is "<session>:<utterance>"
+  partial: null,     // {key, text}
+  lastPartial: null, // last partial text drawn, to skip identical repaints
+  ws: null,
+  ctx: null,
+  node: null,
+  stream: null,
+  analyser: null,
+  raf: 0,
+  startedAt: 0,
+  timerId: 0,
+  demo: new URLSearchParams(location.search).has("demo"),
+  hasKey: true,
+  stopping: false,
+};
+
+/* ----------------------------------------------------------------- helpers */
+function setStatus(text, kind) {
+  els.statusText.textContent = text;
+  els.dot.className = "dot" + (kind ? " " + kind : "");
+}
+
+let toastTimer = 0;
+function toast(message, ms) {
+  els.toast.textContent = message;
+  els.toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => els.toast.classList.remove("show"), ms || 6000);
+}
+
+function banner(text, bad) {
+  if (!text) { els.banner.classList.remove("show"); return; }
+  els.bannerText.innerHTML = text;
+  els.banner.classList.toggle("bad", !!bad);
+  els.banner.classList.add("show");
+}
+
+function clock(ms) {
+  const total = Math.floor(ms / 1000);
+  const m = String(Math.floor(total / 60)).padStart(2, "0");
+  const s = String(total % 60).padStart(2, "0");
+  return m + ":" + s;
+}
+
+function atBottom() {
+  const el = els.scroller;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 140;
+}
+
+function scrollDown(force) {
+  if (force || atBottom()) {
+    els.scroller.scrollTo({ top: els.scroller.scrollHeight, behavior: "smooth" });
+  }
+}
+
+function allText() {
+  return state.finals.map(f => f.text).join("\n");
+}
+
+/* --------------------------------------------------------------- rendering */
+function ensureHintHidden() {
+  if (els.hint && els.hint.parentNode) els.hint.remove();
+}
+
+function makeLine(text, cls) {
+  const p = document.createElement("p");
+  p.className = "line" + (cls ? " " + cls : "");
+  p.textContent = text;
+  return p;
+}
+
+function renderAll() {
+  ensureHintHidden();
+  els.lyrics.innerHTML = "";
+  state.finals.forEach((f, i) => {
+    const p = makeLine(f.text, i === state.finals.length - 1 && !state.partial ? "last" : "");
+    els.lyrics.appendChild(p);
+  });
+  if (state.partial && state.partial.text) {
+    const p = makeLine(state.partial.text, "current");
+    const caret = document.createElement("span");
+    caret.className = "caret";
+    p.appendChild(caret);
+    els.lyrics.appendChild(p);
+  }
+  els.meta.textContent = state.finals.length
+    ? state.finals.length + (state.finals.length === 1 ? " line" : " lines")
+    : "";
+  scrollDown(true);
+}
+
+function updatePartial(text) {
+  ensureHintHidden();
+  let node = els.lyrics.querySelector(".line.current");
+  const previous = els.lyrics.querySelector(".line.last");
+  if (previous) previous.classList.remove("last");
+  if (!node) {
+    node = document.createElement("p");
+    node.className = "line current";
+    node.appendChild(document.createTextNode(""));
+    const caret = document.createElement("span");
+    caret.className = "caret";
+    node.appendChild(caret);
+    els.lyrics.appendChild(node);
+  }
+  const stick = atBottom();
+  node.firstChild.nodeValue = text;
+  if (stick) scrollDown(true);
+}
+
+function pushFinal(key, text) {
+  ensureHintHidden();
+  if (!text) return;
+  const existing = state.finals.findIndex(f => f.key === key);
+  if (existing >= 0) state.finals[existing].text = text;
+  else state.finals.push({ key: key, text: text });
+
+  const current = els.lyrics.querySelector(".line.current");
+  if (current) current.remove();
+  state.partial = null;
+  state.lastPartial = null;
+
+  const lines = els.lyrics.querySelectorAll(".line");
+  lines.forEach(l => l.classList.remove("last"));
+  const lastText = state.finals[state.finals.length - 1].text;
+  if (lines.length === state.finals.length) {
+    const node = lines[lines.length - 1];
+    node.textContent = lastText;
+    node.classList.add("last");
+  } else {
+    renderAll();
+    return;
+  }
+  els.meta.textContent = state.finals.length +
+    (state.finals.length === 1 ? " line" : " lines");
+  scrollDown(true);
+}
+
+/* ------------------------------------------------------------ server events */
+function handle(message) {
+  switch (message.type) {
+    case "started":
+      setStatus("listening", "live");
+      banner("");
+      els.record.disabled = false;
+      break;
+    case "partial":
+      if (message.text && message.text !== state.lastPartial) {
+        state.lastPartial = message.text;
+        state.partial = { key: message.gen + ":" + message.idx, text: message.text };
+        updatePartial(message.text);
+      }
+      break;
+    case "final":
+      pushFinal(message.gen + ":" + message.idx, message.text);
+      break;
+    case "vad":
+      els.record.classList.toggle("speaking", message.state === "speech_start" && state.running);
+      break;
+    case "status":
+      toast(message.message, 3500);
+      setStatus("reconnecting", "warn");
+      break;
+    case "ended":
+      if (message.audio_duration_s) {
+        els.meta.textContent = "audio " + Number(message.audio_duration_s).toFixed(1) + " s";
+      }
+      break;
+    case "error":
+      toast(message.message, message.fatal ? 12000 : 6000);
+      if (message.fatal) { setStatus("error", "bad"); if (!state.stopping) stop(true); }
+      break;
+    case "lost":
+      toast(message.message, 12000);
+      setStatus("disconnected", "bad");
+      if (!state.stopping) stop(true);
+      break;
+    case "closed":
+      if (message.session) {
+        els.meta.textContent = (state.finals.length ? state.finals.length + " lines · " : "") +
+          message.seconds + " s audio";
+      }
+      break;
+  }
+}
+
+/* -------------------------------------------------------------- microphone */
+async function startMic() {
+  state.stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      channelCount: 1,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    },
+  });
+
+  // Asking for 16 kHz lets the browser resample properly for us. If it refuses,
+  // the worklet decimates instead.
+  let ctx;
+  try {
+    ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  } catch (e) {
+    ctx = new AudioContext();
+  }
+  if (ctx.state === "suspended") await ctx.resume();
+  state.ctx = ctx;
+
+  const url = URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" }));
+  await ctx.audioWorklet.addModule(url);
+  URL.revokeObjectURL(url);
+
+  const source = ctx.createMediaStreamSource(state.stream);
+  const node = new AudioWorkletNode(ctx, "pcm16", { numberOfInputs: 1, numberOfOutputs: 1 });
+  state.node = node;
+
+  node.port.onmessage = (event) => {
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+      state.ws.send(event.data);
+    }
+  };
+
+  // A worklet only runs while it is part of a graph that reaches the
+  // destination, so route it through a silent gain node.
+  const silent = ctx.createGain();
+  silent.gain.value = 0;
+  source.connect(node);
+  node.connect(silent);
+  silent.connect(ctx.destination);
+
+  state.analyser = ctx.createAnalyser();
+  state.analyser.fftSize = 512;
+  source.connect(state.analyser);
+  meterLoop();
+}
+
+function meterLoop() {
+  const data = new Float32Array(state.analyser.fftSize);
+  const step = () => {
+    if (!state.analyser) return;
+    state.analyser.getFloatTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+    const rms = Math.sqrt(sum / data.length);
+    const level = Math.min(1, Math.max(0, (20 * Math.log10(rms + 1e-7) + 60) / 60));
+    els.level.style.width = (level * 100).toFixed(1) + "%";
+    state.raf = requestAnimationFrame(step);
+  };
+  state.raf = requestAnimationFrame(step);
+}
+
+function teardownAudio() {
+  cancelAnimationFrame(state.raf);
+  state.raf = 0;
+  if (state.node) { try { state.node.disconnect(); } catch (e) {} state.node = null; }
+  if (state.stream) {
+    state.stream.getTracks().forEach(t => t.stop());
+    state.stream = null;
+  }
+  if (state.ctx) { try { state.ctx.close(); } catch (e) {} state.ctx = null; }
+  state.analyser = null;
+  els.level.style.width = "0%";
+  els.record.classList.remove("speaking");
+}
+
+/* -------------------------------------------------------------- connection */
+function wsUrl() {
+  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+  return scheme + "//" + location.host + "/ws";
+}
+
+async function start() {
+  if (state.running || state.starting) return;
+  state.starting = true;
+  state.stopping = false;
+  state.lastPartial = null;
+  els.record.disabled = true;
+  setStatus("connecting", "warn");
+  els.micIcon.innerHTML = STOP_SVG;
+  els.record.classList.add("on");
+  els.language.disabled = els.mode.disabled = els.streamType.disabled = true;
+
+  try {
+    const ws = new WebSocket(wsUrl());
+    ws.binaryType = "arraybuffer";
+    state.ws = ws;
+
+    const opened = new Promise((resolve, reject) => {
+      ws.onopen = resolve;
+      ws.onerror = () => reject(new Error("Could not reach the local server."));
+    });
+    await opened;
+
+    ws.onmessage = (event) => {
+      let message;
+      try { message = JSON.parse(event.data); } catch (e) { return; }
+      handle(message);
+    };
+    ws.onclose = () => {
+      if (state.running && !state.stopping) {
+        toast("Lost the connection to the local server.", 8000);
+        setStatus("disconnected", "bad");
+        stop(true);
+      }
+    };
+
+    ws.send(JSON.stringify({
+      type: "start",
+      language_code: els.language.value,
+      mode: els.mode.value,
+      stream_type: els.streamType.value,
+    }));
+
+    await startMic();
+
+    state.running = true;
+    state.startedAt = Date.now();
+    state.timerId = setInterval(() => {
+      els.timer.textContent = clock(Date.now() - state.startedAt);
+    }, 250);
+    setStatus("connecting to Sarvam…", "warn");
+  } catch (error) {
+    toast(error && error.message ? error.message : String(error), 10000);
+    setStatus("error", "bad");
+    await stop(true);
+  } finally {
+    state.starting = false;
+    if (state.running) els.record.disabled = false;
+  }
+}
+
+async function stop(silent) {
+  if (state.stopping) return;      // already stopping; ignore repeated calls
+  if (!state.running && !state.ws) {
+    teardownAudio();
+    resetButtons();
+    return;
+  }
+  state.stopping = true;
+  state.running = false;
+  clearInterval(state.timerId);
+  els.record.disabled = true;
+  els.micIcon.innerHTML = MIC_SVG;
+  els.record.classList.remove("on", "speaking");
+  teardownAudio();
+
+  const ws = state.ws;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    try { ws.send(JSON.stringify({ type: "stop" })); } catch (e) {}
+    await new Promise((resolve) => {
+      const done = () => resolve();
+      const timer = setTimeout(done, 4000);
+      const previous = ws.onmessage;
+      ws.onmessage = (event) => {
+        let message = null;
+        try { message = JSON.parse(event.data); } catch (e) {}
+        if (previous) previous(event);
+        if (message && message.type === "closed") {
+          clearTimeout(timer);
+          resolve();
+        }
+      };
+      ws.onclose = () => { clearTimeout(timer); resolve(); };
+    });
+    try { ws.close(); } catch (e) {}
+  }
+  state.ws = null;
+  resetButtons();
+  if (!silent) setStatus("idle", "");
+  els.timer.textContent = "00:00";
+}
+
+function resetButtons() {
+  els.record.disabled = !state.hasKey;
+  els.language.disabled = els.mode.disabled = els.streamType.disabled = false;
+  els.micIcon.innerHTML = MIC_SVG;
+  els.record.classList.remove("on", "speaking");
+  els.level.style.width = "0%";
+}
+
+function toggle() {
+  if (state.stopping) return;
+  if (state.running || state.starting) stop(false);
+  else start();
+}
+
+/* ------------------------------------------------------------------ buttons */
+els.record.addEventListener("click", toggle);
+window.addEventListener("keydown", (event) => {
+  if (event.code !== "Space") return;
+  const tag = (event.target && event.target.tagName) || "";
+  if (tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA") return;
+  event.preventDefault();
+  if (state.demo) return;
+  toggle();
+});
+
+els.copy.addEventListener("click", async () => {
+  const text = allText();
+  if (!text) { toast("Nothing to copy yet."); return; }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Copied " + state.finals.length + " lines.");
+  } catch (e) {
+    toast("Copy failed — your browser blocked the clipboard.");
+  }
+});
+
+els.save.addEventListener("click", () => {
+  const text = allText();
+  if (!text) { toast("Nothing to save yet."); return; }
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  const blob = new Blob([text + "\n"], { type: "text/plain;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "transcript-" + stamp + ".txt";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+});
+
+els.clear.addEventListener("click", () => {
+  state.finals = [];
+  state.partial = null;
+  els.lyrics.innerHTML = "";
+  els.meta.textContent = "";
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.id = "hint";
+  hint.innerHTML = "Cleared. Press the button and start talking.";
+  els.lyrics.appendChild(hint);
+  els.hint = hint;
+});
+
+/* --------------------------------------------------------------------- demo */
+const DEMO_LINES = [
+  "so basically we need to decide if we ship the realtime transcription this week",
+  "haan but pehle latency check karna padega, Sarvam ka socket kaisa perform karta hai",
+  "I tested it, partial transcripts aa rahe hain under one second",
+  "okay that's good, phir hum Wednesday ko demo kar sakte hain investor ko",
+];
+
+function runDemo() {
+  banner("DEMO MODE — this is a scripted preview. No audio, no transcription.", true);
+  setStatus("demo", "warn");
+  els.record.disabled = true;
+  let line = 0;
+  const tick = () => {
+    if (line >= DEMO_LINES.length) return;
+    const words = DEMO_LINES[line].split(" ");
+    let shown = 0;
+    const grow = () => {
+      shown++;
+      state.partial = { key: "0:" + line, text: words.slice(0, shown).join(" ") };
+      updatePartial(state.partial.text);
+      if (shown < words.length) {
+        setTimeout(grow, 130 + Math.random() * 90);
+      } else {
+        setTimeout(() => {
+          pushFinal("0:" + line, DEMO_LINES[line]);
+          line++;
+          setTimeout(tick, 500);
+        }, 260);
+      }
+    };
+    grow();
+  };
+  setTimeout(tick, 500);
+}
+
+/* --------------------------------------------------------------------- boot */
+async function boot() {
+  try {
+    const response = await fetch("/api/config");
+    const config = await response.json();
+    state.hasKey = !!config.has_key;
+    if (!state.hasKey) {
+      banner("No API key yet — put <code>SARVAM_API_KEY</code> in <code>.env</code> " +
+             "next to <code>app.py</code> and restart the server. " +
+             "See <code>RUN_WINDOWS.md</code>.", true);
+      els.record.disabled = true;
+      setStatus("no key", "bad");
+    } else {
+      setStatus("idle", "");
+    }
+  } catch (e) {
+    setStatus("offline", "bad");
+  }
+  if (state.demo) runDemo();
+}
+
+boot();
+</script>
+</body>
+</html>

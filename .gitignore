@@ -6,3 +6,6 @@ results.csv
 outputs.jsonl
 sessions/
 samples/
+querly-live/sessions/*
+querly-live/.env
+
